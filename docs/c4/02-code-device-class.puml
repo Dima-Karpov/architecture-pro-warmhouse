@@ -1,0 +1,40 @@
+@startuml
+title Code — модель устройства (критичный кусок)
+
+class House {
+  id
+  owner_id
+  address
+}
+
+class DeviceType {
+  id
+  code
+  name
+}
+
+class Device {
+  id
+  type_id
+  house_id
+  serial_number
+  status
+}
+
+House "1" o-- "*" Device : в доме много устройств
+DeviceType "1" o-- "*" Device : один тип — много приборов
+
+note right of DeviceType
+  code: heating | light | gate
+  | camera | unknown
+  Новый прибор партнёра =
+  новая строка типа, не сервис
+end note
+
+note bottom of Device
+  Атрибуты как в задании 3:
+  id, type_id, house_id,
+  serial_number, status
+end note
+
+@enduml

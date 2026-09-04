@@ -178,19 +178,357 @@ PostgreSQL на Context показан как единственное хран�
 
 # Задание 2. Проектирование микросервисной архитектуры
 
-В этом задании вам нужно предоставить только диаграммы в модели C4. Мы не просим вас отдельно описывать получившиеся микросервисы и то, как вы определили взаимодействия между компонентами To-Be системы. Если вы правильно подготовите диаграммы C4, они и так это покажут.
+To-Be по доменам задания 1. Свет, ворота, камера и неизвестный датчик — это `DeviceType`, не отдельные сервисы. Своя Postgres на сервис. Связи читаются со схем.
+
+| Домен (As-Is) | To-Be | Сервис |
+| --- | --- | --- |
+| Пользователь / дом | SaaS, self-service, несколько домов | `user-house` |
+| Управление устройствами | реестр, типы, партнёры, комплекты | `device` |
+| Отопление | команда любому типу: heat / light / gate / … | `command` |
+| Телеметрия | показания и история | `telemetry` |
+| — | сценарии «если температура → команда» | `scenario` |
+
+Как сервисы говорят друг с другом — [ADR-006](docs/adr/0006-sync-http-and-broker.md): синхронный HTTP JSON (не gRPC), брокер — только показание → сценарий. Кто жилец и можно ли ему — [ADR-007](docs/adr/0007-auth-at-gateway.md): токен выдаёт `user-house`, пускает Gateway. Чужую БД не читаем ([ADR-004](docs/adr/0004-db-per-service.md)). Свет и ворота не сервисы ([ADR-005](docs/adr/0005-device-type-not-service.md)).
+
+SVG собирает [GitHub Actions](.github/workflows/plantuml.yml).
 
 **Диаграмма контейнеров (Containers)**
 
-Добавьте диаграмму.
+![Container — «Тёплый дом» (To-Be)](docs/c4/02-container-to-be.svg)
+
+Исходник: [docs/c4/02-container-to-be.puml](docs/c4/02-container-to-be.puml)
+
+```plantuml
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title Container — «Тёплый дом» (To-Be)
+
+Person(user, "Жилец", "Self-service: дома, модули, сценарии, телеметрия")
+
+System_Boundary(eco, "Экосистема «Тёплый дом»") {
+    Container(web, "Web UI", "SPA, HTTPS", "Кабинет: дома, устройства, сценарии, показания")
+    Container(gw, "API Gateway", "HTTPS / JSON", "Вход жильца: проверяет токен, маршрутизация")
+
+    Container(userHouse, "user-house", "Go", "Регистрация, сессия, дома, кому что можно")
+    Container(device, "device", "Go", "Реестр устройств и типов, подключение комплектов")
+    Container(command, "command", "Go", "Команда любому DeviceType: heat / light / gate / …")
+    Container(telemetry, "telemetry", "Go", "Приём показаний и история")
+    Container(scenario, "scenario", "Go", "Сценарии: если температура → команда")
+
+    ContainerDb(dbUser, "pg-user-house", "PostgreSQL", "Пользователи и дома")
+    ContainerDb(dbDevice, "pg-device", "PostgreSQL", "Устройства и типы")
+    ContainerDb(dbCommand, "pg-command", "PostgreSQL", "Журнал команд")
+    ContainerDb(dbTel, "pg-telemetry", "PostgreSQL", "Показания")
+    ContainerDb(dbSc, "pg-scenario", "PostgreSQL", "Сценарии")
+
+    ContainerQueue(broker, "Брокер", "Kafka / RabbitMQ", "Телеметрия и события для сценариев")
+}
+
+System_Ext(monolith, "Монолит As-Is", "Legacy Go. Живёт, пока не вынесем device и telemetry")
+System_Ext(partner, "Устройства партнёров", "Датчик, реле, свет, ворота, камера — стандартный протокол")
+
+Rel(user, web, "Открывает кабинет", "HTTPS")
+Rel(web, gw, "Синхронные запросы", "HTTPS JSON")
+
+Rel(gw, userHouse, "Логин и проверка токена", "HTTP JSON")
+Rel(gw, device, "Реестр и подключение", "HTTP JSON")
+Rel(gw, command, "Ручная команда", "HTTP JSON")
+Rel(gw, telemetry, "Смотрит показания", "HTTP JSON")
+Rel(gw, scenario, "Правит сценарии", "HTTP JSON")
+
+Rel(userHouse, dbUser, "Читает и пишет", "SQL")
+Rel(device, dbDevice, "Читает и пишет", "SQL")
+Rel(command, dbCommand, "Пишет журнал", "SQL")
+Rel(telemetry, dbTel, "Пишет и читает", "SQL")
+Rel(scenario, dbSc, "Читает и пишет", "SQL")
+
+Rel(command, device, "Адрес и тип устройства", "HTTP JSON")
+Rel(command, partner, "Отправляет команду", "протокол партнёра")
+Rel(telemetry, broker, "Публикует показание", "async")
+Rel(broker, scenario, "Новое показание", "async")
+Rel(scenario, command, "Запускает команду по правилу", "HTTP JSON")
+
+Rel(monolith, device, "Переход: отдаёт реестр sensors", "HTTP")
+Rel(monolith, telemetry, "Переход: отдаёт опрос температуры", "HTTP")
+
+SHOW_LEGEND()
+@enduml
+```
 
 **Диаграмма компонентов (Components)**
 
-Добавьте диаграмму для каждого из выделенных микросервисов.
+По одному Component на каждый сервис. Жилец в сервисы не ходит напрямую: Gateway уже проверил токен.
+
+`user-house` — кто пользователь и какие у него дома.
+
+![Component — user-house](docs/c4/02-component-user-house.svg)
+
+Исходник: [docs/c4/02-component-user-house.puml](docs/c4/02-component-user-house.puml)
+
+```plantuml
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Component — user-house
+
+Container_Boundary(userHouse, "user-house") {
+    Component(api, "HTTP API", "Gin", "Регистрация, логин, дома, кто владелец")
+    Component(auth, "Сессии и доступ", "Go", "Выдаёт токен, отвечает Gateway: этот жилец существует")
+    Component(houses, "Дома", "Go", "Список домов пользователя, self-service")
+    Component(repo, "Репозиторий", "pgx", "Пользователи, токены, дома")
+}
+
+ContainerDb_Ext(db, "pg-user-house", "PostgreSQL")
+Container_Ext(gw, "API Gateway", "HTTPS / JSON", "Проверяет токен, не логинит сам")
+
+Rel(gw, api, "Логин и профиль", "HTTP JSON")
+Rel(gw, auth, "Токен живой, какой user_id", "HTTP JSON")
+Rel(api, auth, "Логин / логаут")
+Rel(api, houses, "CRUD домов")
+Rel(auth, repo, "Читает и пишет")
+Rel(houses, repo, "Читает и пишет")
+Rel(repo, db, "SQL")
+
+SHOW_LEGEND()
+@enduml
+```
+
+`device` — API, менеджер состояния, обработчик подключения (как в курсе).
+
+![Component — device](docs/c4/02-component-device.svg)
+
+Исходник: [docs/c4/02-component-device.puml](docs/c4/02-component-device.puml)
+
+```plantuml
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Component — device
+
+Container_Boundary(device, "device") {
+    Component(api, "HTTP API", "Gin", "CRUD устройства, список типов, self-service подключение")
+    Component(registry, "Менеджер состояния", "Go", "Статус, дом, тип, serial")
+    Component(pairing, "Обработчик подключения", "Go", "Жилец сам привязывает комплект")
+    Component(repo, "Репозиторий", "pgx", "Запись в свою БД")
+}
+
+ContainerDb_Ext(db, "pg-device", "PostgreSQL", "Устройства и DeviceType")
+Container_Ext(command, "command", "Go", "Нужен тип и адрес для команды")
+Container_Ext(gw, "API Gateway", "HTTPS / JSON")
+System_Ext(partner, "Устройства партнёров", "Комплект: датчик / реле / свет / ворота")
+
+Rel(gw, api, "Запросы реестра и pairing", "HTTP JSON")
+Rel(api, registry, "Меняет состояние")
+Rel(api, pairing, "Запускает подключение")
+Rel(registry, repo, "Читает и пишет")
+Rel(pairing, repo, "Сохраняет новое устройство")
+Rel(pairing, partner, "Проверяет комплект", "протокол партнёра")
+Rel(repo, db, "SQL")
+Rel(command, api, "Спрашивает устройство по id", "HTTP JSON")
+
+SHOW_LEGEND()
+@enduml
+```
+
+`telemetry` — приём, валидация, история, событие в брокер.
+
+![Component — telemetry](docs/c4/02-component-telemetry.svg)
+
+Исходник: [docs/c4/02-component-telemetry.puml](docs/c4/02-component-telemetry.puml)
+
+```plantuml
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Component — telemetry
+
+Container_Boundary(telemetry, "telemetry") {
+    Component(api, "HTTP API", "Gin", "Приём показания и выдача истории")
+    Component(validate, "Валидация", "Go", "Тип метрики, диапазон, устройство существует")
+    Component(store, "Хранилище показаний", "Go", "Пишет историю, отдаёт выборку")
+    Component(pub, "Издатель", "Go", "Кладёт событие в брокер для сценариев")
+}
+
+ContainerDb_Ext(db, "pg-telemetry", "PostgreSQL", "История показаний")
+Container_Ext(broker, "Брокер", "Kafka / RabbitMQ", "События показаний")
+Container_Ext(gw, "API Gateway", "HTTPS / JSON")
+Container_Ext(device, "device", "Go", "Проверка, что устройство есть")
+System_Ext(partner, "Устройства партнёров", "Шлют температуру и другие метрики")
+
+Rel(gw, api, "Жилец смотрит историю", "HTTP JSON")
+Rel(partner, api, "Присылает показание", "HTTP JSON")
+Rel(api, validate, "Проверяет пакет")
+Rel(validate, device, "Устройство известно", "HTTP JSON")
+Rel(validate, store, "Сохраняет валидное")
+Rel(store, db, "SQL")
+Rel(store, pub, "После записи")
+Rel(pub, broker, "telemetry.received", "async")
+
+SHOW_LEGEND()
+@enduml
+```
+
+`command` — ручная команда и вызов сценария, проверка дома, адаптер партнёра.
+
+![Component — command](docs/c4/02-component-command.svg)
+
+Исходник: [docs/c4/02-component-command.puml](docs/c4/02-component-command.puml)
+
+```plantuml
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Component — command
+
+Container_Boundary(command, "command") {
+    Component(api, "HTTP API", "Gin", "Ручная команда и вызов от сценария")
+    Component(handler, "Обработчик команд", "Go", "on / off / lock по DeviceType")
+    Component(acl, "Проверка дома", "Go", "Устройство принадлежит дому жильца")
+    Component(adapter, "Адаптер партнёра", "Go", "Один выход на heat / light / gate / …")
+    Component(repo, "Журнал", "pgx", "Кто что отправил и чем кончилось")
+}
+
+ContainerDb_Ext(db, "pg-command", "PostgreSQL")
+Container_Ext(gw, "API Gateway", "HTTPS / JSON")
+Container_Ext(device, "device", "Go", "Тип, адрес, status, house_id")
+Container_Ext(scenario, "scenario", "Go", "Автокоманда по правилу")
+System_Ext(partner, "Устройства партнёров")
+
+Rel(gw, api, "Команда жильца", "HTTP JSON")
+Rel(scenario, api, "Команда сценария", "HTTP JSON")
+Rel(api, acl, "Этот дом его")
+Rel(acl, device, "Чей device_id", "HTTP JSON")
+Rel(api, handler, "Выполнить")
+Rel(handler, adapter, "По типу прибора")
+Rel(adapter, partner, "Команда", "протокол партнёра")
+Rel(handler, repo, "Пишет журнал")
+Rel(repo, db, "SQL")
+
+SHOW_LEGEND()
+@enduml
+```
+
+`scenario` — правила жильца, подписка на брокер, вызов command.
+
+![Component — scenario](docs/c4/02-component-scenario.svg)
+
+Исходник: [docs/c4/02-component-scenario.puml](docs/c4/02-component-scenario.puml)
+
+```plantuml
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Component — scenario
+
+Container_Boundary(scenario, "scenario") {
+    Component(api, "HTTP API", "Gin", "CRUD правил жильца")
+    Component(engine, "Движок правил", "Go", "Если показание — то команда")
+    Component(consumer, "Подписчик телеметрии", "Go", "Читает брокер, не поллит HTTP")
+    Component(repo, "Репозиторий", "pgx", "Сценарии дома")
+}
+
+ContainerDb_Ext(db, "pg-scenario", "PostgreSQL")
+Container_Ext(gw, "API Gateway", "HTTPS / JSON")
+Container_Ext(cmd, "command", "Go")
+Container_Ext(broker, "Брокер", "Kafka / RabbitMQ")
+
+Rel(gw, api, "Правит сценарии", "HTTP JSON")
+Rel(api, repo, "Читает и пишет")
+Rel(repo, db, "SQL")
+Rel(broker, consumer, "Новое показание", "async")
+Rel(consumer, engine, "Проверяет правила")
+Rel(engine, repo, "Активные сценарии дома")
+Rel(engine, cmd, "Запускает команду", "HTTP JSON")
+
+SHOW_LEGEND()
+@enduml
+```
 
 **Диаграмма кода (Code)**
 
-Добавьте одну диаграмму или несколько.
+Модель устройства (потом ляжет на ER задания 3) и последовательность команды.
+
+![Code — модель устройства](docs/c4/02-code-device-class.svg)
+
+Исходник: [docs/c4/02-code-device-class.puml](docs/c4/02-code-device-class.puml)
+
+```plantuml
+@startuml
+title Code — модель устройства (критичный кусок)
+
+class House {
+  id
+  owner_id
+  address
+}
+
+class DeviceType {
+  id
+  code
+  name
+}
+
+class Device {
+  id
+  type_id
+  house_id
+  serial_number
+  status
+}
+
+House "1" o-- "*" Device : в доме много устройств
+DeviceType "1" o-- "*" Device : один тип — много приборов
+
+note right of DeviceType
+  code: heating | light | gate
+  | camera | unknown
+  Новый прибор партнёра =
+  новая строка типа, не сервис
+end note
+
+note bottom of Device
+  Атрибуты как в задании 3:
+  id, type_id, house_id,
+  serial_number, status
+end note
+
+@enduml
+```
+
+![Code — команда устройству](docs/c4/02-code-command-sequence.svg)
+
+Исходник: [docs/c4/02-code-command-sequence.puml](docs/c4/02-code-command-sequence.puml)
+
+```plantuml
+@startuml
+title Code — команда устройству (отопление / свет / ворота)
+
+actor Жилец
+participant "Web UI" as ui
+participant "API Gateway" as gw
+participant command
+participant device
+participant "Устройство партнёра" as hw
+
+Жилец -> ui: on / off / lock
+ui -> gw: POST /commands
+gw -> command: команда + device_id
+command -> device: GET устройство
+device --> command: type, адрес, status
+alt устройство inactive
+    command --> gw: 409
+else ok
+    command -> hw: команда по типу\nheat / light / gate / …
+    hw --> command: ack
+    command --> gw: 200
+    gw --> ui: ок
+    ui --> Жилец: статус
+end
+
+@enduml
+```
+
 
 # Задание 3. Разработка ER-диаграммы
 
