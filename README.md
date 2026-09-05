@@ -222,7 +222,7 @@ System_Boundary(eco, "Экосистема «Тёплый дом»") {
     ContainerDb(dbTel, "pg-telemetry", "PostgreSQL", "Показания")
     ContainerDb(dbSc, "pg-scenario", "PostgreSQL", "Сценарии")
 
-    ContainerQueue(broker, "Брокер", "Kafka / RabbitMQ", "Телеметрия и события для сценариев")
+    ContainerQueue(broker, "Брокер", "RabbitMQ", "Телеметрия и события для сценариев")
 }
 
 System_Ext(monolith, "Монолит As-Is", "Legacy Go. Живёт, пока не вынесем device и telemetry")
@@ -273,7 +273,7 @@ SHOW_LEGEND()
 title Component — user-house
 
 Container_Boundary(userHouse, "user-house") {
-    Component(api, "HTTP API", "Gin", "Регистрация, логин, дома, кто владелец")
+    Component(api, "HTTP API", "Fiber 3", "Регистрация, логин, дома, кто владелец")
     Component(auth, "Сессии и доступ", "Go", "Выдаёт токен, отвечает Gateway: этот жилец существует")
     Component(houses, "Дома", "Go", "Список домов пользователя, self-service")
     Component(repo, "Репозиторий", "pgx", "Пользователи, токены, дома")
@@ -307,7 +307,7 @@ SHOW_LEGEND()
 title Component — device
 
 Container_Boundary(device, "device") {
-    Component(api, "HTTP API", "Gin", "CRUD устройства, список типов, self-service подключение")
+    Component(api, "HTTP API", "Fiber 3", "CRUD устройства, список типов, self-service подключение")
     Component(registry, "Менеджер состояния", "Go", "Статус, дом, тип, serial")
     Component(pairing, "Обработчик подключения", "Go", "Жилец сам привязывает комплект")
     Component(repo, "Репозиторий", "pgx", "Запись в свою БД")
@@ -344,14 +344,14 @@ SHOW_LEGEND()
 title Component — telemetry
 
 Container_Boundary(telemetry, "telemetry") {
-    Component(api, "HTTP API", "Gin", "Приём показания и выдача истории")
+    Component(api, "HTTP API", "Fiber 3", "Приём показания и выдача истории")
     Component(validate, "Валидация", "Go", "Тип метрики, диапазон, устройство существует")
     Component(store, "Хранилище показаний", "Go", "Пишет историю, отдаёт выборку")
     Component(pub, "Издатель", "Go", "Кладёт событие в брокер для сценариев")
 }
 
 ContainerDb_Ext(db, "pg-telemetry", "PostgreSQL", "История показаний")
-Container_Ext(broker, "Брокер", "Kafka / RabbitMQ", "События показаний")
+Container_Ext(broker, "Брокер", "RabbitMQ", "События показаний")
 Container_Ext(gw, "API Gateway", "HTTPS / JSON")
 Container_Ext(device, "device", "Go", "Проверка, что устройство есть")
 System_Ext(partner, "Устройства партнёров", "Шлют температуру и другие метрики")
@@ -382,7 +382,7 @@ SHOW_LEGEND()
 title Component — command
 
 Container_Boundary(command, "command") {
-    Component(api, "HTTP API", "Gin", "Ручная команда и вызов от сценария")
+    Component(api, "HTTP API", "Fiber 3", "Ручная команда и вызов от сценария")
     Component(handler, "Обработчик команд", "Go", "on / off / lock по DeviceType")
     Component(acl, "Проверка дома", "Go", "Устройство принадлежит дому жильца")
     Component(adapter, "Адаптер партнёра", "Go", "Один выход на heat / light / gate / …")
@@ -422,7 +422,7 @@ SHOW_LEGEND()
 title Component — scenario
 
 Container_Boundary(scenario, "scenario") {
-    Component(api, "HTTP API", "Gin", "CRUD правил жильца")
+    Component(api, "HTTP API", "Fiber 3", "CRUD правил жильца")
     Component(engine, "Движок правил", "Go", "Если показание — то команда")
     Component(consumer, "Подписчик телеметрии", "Go", "Читает брокер, не поллит HTTP")
     Component(repo, "Репозиторий", "pgx", "Сценарии дома")
@@ -431,7 +431,7 @@ Container_Boundary(scenario, "scenario") {
 ContainerDb_Ext(db, "pg-scenario", "PostgreSQL")
 Container_Ext(gw, "API Gateway", "HTTPS / JSON")
 Container_Ext(cmd, "command", "Go")
-Container_Ext(broker, "Брокер", "Kafka / RabbitMQ")
+Container_Ext(broker, "Брокер", "RabbitMQ")
 
 Rel(gw, api, "Правит сценарии", "HTTP JSON")
 Rel(api, repo, "Читает и пишет")
@@ -474,6 +474,7 @@ class Device {
   type_id
   house_id
   serial_number
+  address
   status
 }
 
@@ -490,7 +491,8 @@ end note
 note bottom of Device
   Атрибуты как в задании 3:
   id, type_id, house_id,
-  serial_number, status
+  serial_number, address,
+  status: on / off / inactive
 end note
 
 @enduml
@@ -544,7 +546,7 @@ end
 | `House` | `user-house` | `id`, `owner_id`, `address`, `name` | дом, один владелец |
 | `DeviceType` | `device` | `id`, `code`, `name` | heating / light / gate / camera / unknown |
 | `Module` | `device` | `id`, `house_id`, `type_id`, `name`, `status` | выбранный комплект в доме |
-| `Device` | `device` | `id`, `type_id`, `house_id`, `serial_number`, `status` | прибор в доме |
+| `Device` | `device` | `id`, `type_id`, `house_id`, `serial_number`, `address`, `status` | прибор в доме; `inactive` — ещё не подключён |
 | `TelemetryData` | `telemetry` | `id`, `device_id`, `value`, `unit`, `recorded_at` | история показаний |
 | `Scenario` | `scenario` | `id`, `house_id`, `name`, `condition`, `action`, `enabled` | если показание → команда |
 | `Command` | `command` | `id`, `device_id`, `action`, `source`, `result`, `created_at` | журнал on / off / lock |
@@ -621,6 +623,7 @@ package "device · pg-device" #E8F5E9 {
     * type_id : UUID <<FK DeviceType>>
     * house_id : UUID <<ref House>>
     * serial_number : string
+    * address : string
     * status : string
   }
 
@@ -671,11 +674,12 @@ Device ||--o{ Command : 1:N
 
 legend bottom
   Рамка = своя Postgres (ADR-004). Все связи **1:N**.
+  id — UUID v7 (16 байт, по времени).
   **FK** — ключ в своей БД. **ref** — id другого сервиса, только API.
   User — House: один жилец — много домов, у дома один владелец.
   DeviceType.code: heating | light | gate | camera | unknown.
   Module — комплект в доме. Device — прибор. Связи Module — Device нет:
-  оба смотрят на House и DeviceType. Device.status: on / off.
+  оба смотрят на House и DeviceType. Device.status: on / off / inactive.
 end legend
 
 @enduml
@@ -685,11 +689,38 @@ end legend
 
 ### 1. Тип API
 
-Укажите, какой тип API вы будете использовать для взаимодействия микросервисов. Объясните своё решение.
+Как в [ADR-006](docs/adr/0006-sync-http-and-broker.md): два контура, не всё в брокер и не всё в HTTP.
+
+**REST, HTTP JSON** — когда вызывающий ждёт результат в том же запросе: жилец через Gateway, `command` → `device`, `scenario` → `command`. Задание просит OpenAPI/Swagger; монолит в задании 6 тоже HTTP. gRPC не берём.
+
+**AsyncAPI** — одно событие: `telemetry` записал показание и публикует `telemetry.received`, `scenario` читает. Иначе сценарии будут поллить `telemetry`.
+
+REST-спека **собирается из аннотаций** (`swag`):
+
+```bash
+make api-doc
+```
+
+Источник: `apps/api-docs` (аннотации над хендлерами). Выход: `schemas/openapi.yaml` (`swag`) и `schemas/asyncapi.yaml` (`asyngo`). Сервисы задания 6 потом реализуют те же пути и событие.
 
 ### 2. Документация API
 
-Здесь приложите ссылки на документацию API для микросервисов, которые вы спроектировали в первой части проектной работы. Для документирования используйте Swagger/OpenAPI или AsyncAPI.
+| Файл | Тип | Что внутри |
+| --- | --- | --- |
+| [schemas/openapi.yaml](schemas/openapi.yaml) | OpenAPI 3.1.0 | 4 REST-операции |
+| [schemas/asyncapi.yaml](schemas/asyncapi.yaml) | AsyncAPI 3.0.0 | событие `telemetry.received` |
+
+Открыть REST: [Swagger Editor](https://editor.swagger.io/). AsyncAPI: [AsyncAPI Studio](https://studio.asyncapi.com/).
+
+| Метод | Путь | Сервис | Зачем |
+| --- | --- | --- | --- |
+| `GET` | `/api/v1/devices/{id}` | `device` | карточка прибора; тем же путём `command` берёт тип и адрес |
+| `PATCH` | `/api/v1/devices/{id}/status` | `device` | сменить on/off |
+| `POST` | `/api/v1/commands` | `command` | команда жильца или сценария |
+| `GET` | `/api/v1/telemetry?device_ids=` | `telemetry` | история; несколько id через запятую |
+| async | `telemetry.received` | `telemetry` → `scenario` | новое показание, без поллинга |
+
+На каждый REST-путь: JSON request/response, коды **200 / 404 / 500**, у команды ещё **409** (`status=inactive`). Ошибки: `{ "errors": [{ "type", "message", "context" }] }`. Примеры запросов и ответов — в блоке `examples`. Идентификаторы — **UUID v7**. `command` берёт у устройства `type_code` и `address`. `source` команды ставит сервис, не клиент.
 
 # Задание 5. Работа с docker и docker-compose
 

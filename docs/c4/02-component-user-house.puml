@@ -4,7 +4,7 @@
 title Component — user-house
 
 Container_Boundary(userHouse, "user-house") {
-    Component(api, "HTTP API", "Gin", "Регистрация, логин, дома, кто владелец")
+    Component(api, "HTTP API", "Fiber 3", "Регистрация, логин, дома, кто владелец")
     Component(auth, "Сессии и доступ", "Go", "Выдаёт токен, отвечает Gateway: этот жилец существует")
     Component(houses, "Дома", "Go", "Список домов пользователя, self-service")
     Component(repo, "Репозиторий", "pgx", "Пользователи, токены, дома")

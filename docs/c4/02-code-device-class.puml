@@ -18,6 +18,7 @@ class Device {
   type_id
   house_id
   serial_number
+  address
   status
 }
 
@@ -34,7 +35,8 @@ end note
 note bottom of Device
   Атрибуты как в задании 3:
   id, type_id, house_id,
-  serial_number, status
+  serial_number, address,
+  status: on / off / inactive
 end note
 
 @enduml

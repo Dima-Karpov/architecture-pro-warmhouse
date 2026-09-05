@@ -4,7 +4,7 @@
 title Component — command
 
 Container_Boundary(command, "command") {
-    Component(api, "HTTP API", "Gin", "Ручная команда и вызов от сценария")
+    Component(api, "HTTP API", "Fiber 3", "Ручная команда и вызов от сценария")
     Component(handler, "Обработчик команд", "Go", "on / off / lock по DeviceType")
     Component(acl, "Проверка дома", "Go", "Устройство принадлежит дому жильца")
     Component(adapter, "Адаптер партнёра", "Go", "Один выход на heat / light / gate / …")

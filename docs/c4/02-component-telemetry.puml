@@ -4,14 +4,14 @@
 title Component — telemetry
 
 Container_Boundary(telemetry, "telemetry") {
-    Component(api, "HTTP API", "Gin", "Приём показания и выдача истории")
+    Component(api, "HTTP API", "Fiber 3", "Приём показания и выдача истории")
     Component(validate, "Валидация", "Go", "Тип метрики, диапазон, устройство существует")
     Component(store, "Хранилище показаний", "Go", "Пишет историю, отдаёт выборку")
     Component(pub, "Издатель", "Go", "Кладёт событие в брокер для сценариев")
 }
 
 ContainerDb_Ext(db, "pg-telemetry", "PostgreSQL", "История показаний")
-Container_Ext(broker, "Брокер", "Kafka / RabbitMQ", "События показаний")
+Container_Ext(broker, "Брокер", "RabbitMQ", "События показаний")
 Container_Ext(gw, "API Gateway", "HTTPS / JSON")
 Container_Ext(device, "device", "Go", "Проверка, что устройство есть")
 System_Ext(partner, "Устройства партнёров", "Шлют температуру и другие метрики")

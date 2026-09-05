@@ -4,7 +4,7 @@
 title Component — device
 
 Container_Boundary(device, "device") {
-    Component(api, "HTTP API", "Gin", "CRUD устройства, список типов, self-service подключение")
+    Component(api, "HTTP API", "Fiber 3", "CRUD устройства, список типов, self-service подключение")
     Component(registry, "Менеджер состояния", "Go", "Статус, дом, тип, serial")
     Component(pairing, "Обработчик подключения", "Go", "Жилец сам привязывает комплект")
     Component(repo, "Репозиторий", "pgx", "Запись в свою БД")

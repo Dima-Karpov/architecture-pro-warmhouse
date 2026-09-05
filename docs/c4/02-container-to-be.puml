@@ -21,7 +21,7 @@ System_Boundary(eco, "Экосистема «Тёплый дом»") {
     ContainerDb(dbTel, "pg-telemetry", "PostgreSQL", "Показания")
     ContainerDb(dbSc, "pg-scenario", "PostgreSQL", "Сценарии")
 
-    ContainerQueue(broker, "Брокер", "Kafka / RabbitMQ", "Телеметрия и события для сценариев")
+    ContainerQueue(broker, "Брокер", "RabbitMQ", "Телеметрия и события для сценариев")
 }
 
 System_Ext(monolith, "Монолит As-Is", "Legacy Go. Живёт, пока не вынесем device и telemetry")
