@@ -532,7 +532,154 @@ end
 
 # Задание 3. Разработка ER-диаграммы
 
-Добавьте сюда ER-диаграмму. Она должна отражать ключевые сущности системы, их атрибуты и тип связей между ними.
+Логическая модель To-Be. Сущности режем по тем же сервисам, что в задании 2. Своя Postgres на сервис ([ADR-004](docs/adr/0004-db-per-service.md)): внутри пакета — обычный FK, между пакетами — только `id` (ref), JOIN чужой таблицы нет.
+
+`Module` — комплект, который жилец сам выбирает для дома (отопление, свет, ворота). `Device` — конкретный прибор с серийником. Связи Module — Device нет: оба смотрят на дом и тип. `DeviceType` — справочник видов; свет и ворота не отдельные таблицы и не сервисы ([ADR-005](docs/adr/0005-device-type-not-service.md)).
+
+Как в задании: один жилец — много домов, у дома один владелец (`owner_id`).
+
+| Сущность | Сервис / БД | Атрибуты | Зачем |
+| --- | --- | --- | --- |
+| `User` | `user-house` | `id`, `email`, `created_at` | кто жилец |
+| `House` | `user-house` | `id`, `owner_id`, `address`, `name` | дом, один владелец |
+| `DeviceType` | `device` | `id`, `code`, `name` | heating / light / gate / camera / unknown |
+| `Module` | `device` | `id`, `house_id`, `type_id`, `name`, `status` | выбранный комплект в доме |
+| `Device` | `device` | `id`, `type_id`, `house_id`, `serial_number`, `status` | прибор в доме |
+| `TelemetryData` | `telemetry` | `id`, `device_id`, `value`, `unit`, `recorded_at` | история показаний |
+| `Scenario` | `scenario` | `id`, `house_id`, `name`, `condition`, `action`, `enabled` | если показание → команда |
+| `Command` | `command` | `id`, `device_id`, `action`, `source`, `result`, `created_at` | журнал on / off / lock |
+
+| Связь | Тип | Смысл |
+| --- | --- | --- |
+| User — House | 1 : N | один жилец — много домов; у дома один владелец |
+| House — Module | 1 : N | в доме несколько комплектов |
+| DeviceType — Module | 1 : N | один тип — много комплектов |
+| House — Device | 1 : N | в доме несколько устройств |
+| DeviceType — Device | 1 : N | один тип — много приборов |
+| Device — TelemetryData | 1 : N | одно устройство — много показаний |
+| House — Scenario | 1 : N | у дома несколько сценариев |
+| Device — Command | 1 : N | одно устройство — много команд |
+
+SVG собирает [GitHub Actions](.github/workflows/plantuml.yml).
+
+![ER — «Тёплый дом» (To-Be)](docs/c4/03-er-to-be.svg)
+
+Исходник: [docs/c4/03-er-to-be.puml](docs/c4/03-er-to-be.puml)
+
+```plantuml
+@startuml
+title ER — «Тёплый дом» (To-Be, логическая модель)
+
+left to right direction
+hide circle
+skinparam linetype polyline
+skinparam nodesep 80
+skinparam ranksep 110
+skinparam packagePadding 22
+skinparam shadowing false
+skinparam ArrowThickness 1.2
+
+package "user-house · pg-user-house" #E3F2FD {
+  entity "User" as User {
+    * id : UUID <<PK>>
+    --
+    * email : string
+    created_at : time
+  }
+
+  entity "House" as House {
+    * id : UUID <<PK>>
+    --
+    * owner_id : UUID <<FK User>>
+    * address : string
+    name : string
+  }
+
+  User ||--o{ House : 1:N
+}
+
+package "device · pg-device" #E8F5E9 {
+  entity "DeviceType" as DeviceType {
+    * id : UUID <<PK>>
+    --
+    * code : string
+    * name : string
+  }
+
+  entity "Module" as Module {
+    * id : UUID <<PK>>
+    --
+    * house_id : UUID <<ref House>>
+    * type_id : UUID <<FK DeviceType>>
+    * name : string
+    status : string
+  }
+
+  entity "Device" as Device {
+    * id : UUID <<PK>>
+    --
+    * type_id : UUID <<FK DeviceType>>
+    * house_id : UUID <<ref House>>
+    * serial_number : string
+    * status : string
+  }
+
+  DeviceType ||--o{ Module : 1:N
+  DeviceType ||--o{ Device : 1:N
+}
+
+package "scenario · pg-scenario" #FFF8E1 {
+  entity "Scenario" as Scenario {
+    * id : UUID <<PK>>
+    --
+    * house_id : UUID <<ref House>>
+    * name : string
+    condition : string
+    action : string
+    enabled : boolean
+  }
+}
+
+package "telemetry · pg-telemetry" #F3E5F5 {
+  entity "TelemetryData" as TelemetryData {
+    * id : UUID <<PK>>
+    --
+    * device_id : UUID <<ref Device>>
+    * value : float
+    unit : string
+    recorded_at : time
+  }
+}
+
+package "command · pg-command" #FBE9E7 {
+  entity "Command" as Command {
+    * id : UUID <<PK>>
+    --
+    * device_id : UUID <<ref Device>>
+    * action : string
+    source : string
+    result : string
+    created_at : time
+  }
+}
+
+House ||--o{ Module : 1:N
+House ||--o{ Device : 1:N
+House ||--o{ Scenario : 1:N
+Device ||--o{ TelemetryData : 1:N
+Device ||--o{ Command : 1:N
+
+legend bottom
+  Рамка = своя Postgres (ADR-004). Все связи **1:N**.
+  **FK** — ключ в своей БД. **ref** — id другого сервиса, только API.
+  User — House: один жилец — много домов, у дома один владелец.
+  DeviceType.code: heating | light | gate | camera | unknown.
+  Module — комплект в доме. Device — прибор. Связи Module — Device нет:
+  оба смотрят на House и DeviceType. Device.status: on / off.
+end legend
+
+@enduml
+```
 
 # Задание 4. Создание и документирование API
 
