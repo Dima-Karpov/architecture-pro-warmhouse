@@ -2,3 +2,4 @@
 .idea
 docs/**/*.png
 apps/api-docs/docs/
+apps/.env

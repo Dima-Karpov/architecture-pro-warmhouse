@@ -777,6 +777,26 @@ Locations - название комнаты, sensorId - идентификато
 
 Ревьюер будет проверять точно так же.
 
+### Решение
+
+Датчик `apps/temperature-api` (Go, Fiber v3). Postgres + `./smart_home/init.sql`. Монолит смотрит на `http://temperature-api:8081`.
+
+```bash
+cd apps
+cp .env.example .env   # можно пропустить: в compose есть дефолты postgres/postgres/smarthome
+./init.sh
+```
+
+| Сервис | Порт |
+| --- | --- |
+| `app` | 8080 |
+| `temperature-api` | 8081 |
+| `postgres` | 5432 |
+
+JSON датчика: `value`, `unit`, `timestamp`, `location`, `status`, `sensor_id`, `sensor_type`, `description`. `1` Living Room · `2` Bedroom · `3` Kitchen. `value` случайный каждый запрос.
+
+Swagger: `make api-doc temperature-api` → `apps/temperature-api/docs/`, UI http://localhost:8081/swagger
+
 
 # **Задание 6. Разработка MVP**
 

@@ -11,6 +11,7 @@
 The easiest way to start the application is to use Docker Compose:
 
 ```bash
+cp .env.example .env   # если ещё нет
 ./init.sh
 ```
 
