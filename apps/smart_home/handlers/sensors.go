@@ -18,13 +18,22 @@ import (
 type SensorHandler struct {
 	DB                 *db.DB
 	TemperatureService *services.TemperatureService
+	DeviceService      *services.DeviceService
+	TelemetryService   *services.TelemetryService
 }
 
 // NewSensorHandler creates a new SensorHandler
-func NewSensorHandler(db *db.DB, temperatureService *services.TemperatureService) *SensorHandler {
+func NewSensorHandler(
+	db *db.DB,
+	temperatureService *services.TemperatureService,
+	deviceService *services.DeviceService,
+	telemetryService *services.TelemetryService,
+) *SensorHandler {
 	return &SensorHandler{
 		DB:                 db,
 		TemperatureService: temperatureService,
+		DeviceService:      deviceService,
+		TelemetryService:   telemetryService,
 	}
 }
 
@@ -64,6 +73,8 @@ func (h *SensorHandler) GetSensors(c *gin.Context) {
 				log.Printf("Failed to fetch temperature data for sensor %d: %v", sensor.ID, err)
 			}
 		}
+
+		h.publishTransition(c.Request.Context(), sensors[i], true)
 	}
 
 	c.JSON(http.StatusOK, sensors)
@@ -96,6 +107,8 @@ func (h *SensorHandler) GetSensorByID(c *gin.Context) {
 			log.Printf("Failed to fetch temperature data for sensor %d: %v", sensor.ID, err)
 		}
 	}
+
+	h.publishTransition(c.Request.Context(), sensor, true)
 
 	c.JSON(http.StatusOK, sensor)
 }
@@ -142,6 +155,8 @@ func (h *SensorHandler) CreateSensor(c *gin.Context) {
 		return
 	}
 
+	h.publishTransition(c.Request.Context(), sensor, false)
+
 	c.JSON(http.StatusCreated, sensor)
 }
 
@@ -164,6 +179,8 @@ func (h *SensorHandler) UpdateSensor(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	h.publishTransition(c.Request.Context(), sensor, false)
 
 	c.JSON(http.StatusOK, sensor)
 }
@@ -209,5 +226,54 @@ func (h *SensorHandler) UpdateSensorValue(c *gin.Context) {
 		return
 	}
 
+	sensor, getErr := h.DB.GetSensorByID(context.Background(), id)
+	if getErr == nil {
+		h.publishTransition(c.Request.Context(), sensor, true)
+	}
+
 	c.JSON(http.StatusOK, gin.H{"message": "Sensor value updated successfully"})
+}
+
+func (h *SensorHandler) publishTransition(ctx context.Context, sensor models.Sensor, withReading bool) {
+	device, err := h.DeviceService.Upsert(ctx, services.DeviceUpsert{
+		SerialNumber: sensor.Name,
+		Address:      sensor.Location,
+		TypeCode:     typeCodeFromSensor(sensor.Type),
+		Status:       statusFromSensor(sensor.Status),
+		ExternalID:   strconv.Itoa(sensor.ID),
+	})
+	if err != nil {
+		log.Printf("device sync failed for sensor %d: %v", sensor.ID, err)
+		return
+	}
+
+	if device == nil || !withReading {
+		return
+	}
+
+	if err = h.TelemetryService.Ingest(ctx, services.TelemetryIngest{
+		RecordedAt: sensor.LastUpdated,
+		Unit:       sensor.Unit,
+		Value:      sensor.Value,
+		DeviceID:   device.ID,
+	}); err != nil {
+		log.Printf("telemetry ingest failed for sensor %d: %v", sensor.ID, err)
+	}
+}
+
+func typeCodeFromSensor(sensorType models.SensorType) string {
+	if sensorType == models.Temperature {
+		return "heating"
+	}
+
+	return "unknown"
+}
+
+func statusFromSensor(status string) string {
+	switch status {
+	case "active", "on":
+		return "on"
+	default:
+		return "off"
+	}
 }

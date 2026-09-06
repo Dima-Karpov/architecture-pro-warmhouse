@@ -1,0 +1,3 @@
+.golangci.yml
+docs/swagger.json
+**/*_test.go

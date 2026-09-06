@@ -791,7 +791,7 @@ cp .env.example .env   # можно пропустить: в compose есть д
 | --- | --- |
 | `app` | 8080 |
 | `temperature-api` | 8081 |
-| `postgres` | 5432 |
+| `db` | 5432 |
 
 JSON датчика: `value`, `unit`, `timestamp`, `location`, `status`, `sensor_id`, `sensor_type`, `description`. `1` Living Room · `2` Bedroom · `3` Kitchen. `value` случайный каждый запрос.
 
@@ -807,4 +807,37 @@ Swagger: `make api-doc temperature-api` → `apps/temperature-api/docs/`, UI htt
 1. Создайте новые микросервисы для управления телеметрией и устройствами (с простейшей логикой), которые будут интегрированы с существующим монолитным приложением. Каждый микросервис на своем ООП языке.
 2. Обеспечьте взаимодействие между микросервисами и монолитом (при желании с помощью брокера сообщений), чтобы постепенно перенести функциональность из монолита в микросервисы. 
 
-В результате у вас должны быть созданы Dockerfiles и docker-compose для запуска микросервисов. 
+В результате у вас должны быть созданы Dockerfiles и docker-compose для запуска микросервисов.
+
+### Решение
+
+Два сервиса рядом с монолитом, как на Container: `device` и `telemetry`. Go, Fiber v3, те же слои что у `temperature-api` (domain → usecase → interfaces → infrastructure). Своя Postgres на сервис ([ADR-004](docs/adr/0004-db-per-service.md)): базы `device` и `telemetry` на общем инстансе. Таблицы поднимает GORM `AutoMigrate`.
+
+**Интеграция.** Монолит не ломаем: Postman Create/Get Sensors как в задании 5. При CRUD и опросе температуры монолит сам отдаёт данные наружу: `POST /api/v1/devices` (upsert по `external_id` = id сенсора) и `POST /api/v1/telemetry`. Если сервис не ответил — лог, ответ жильцу тот же.
+
+**Брокер.** После записи показания `telemetry` публикует `telemetry.received` в RabbitMQ. `scenario` читает очередь и решает: t° < 18 → on, t° > 25 → off, иначе ничего. Команду на прибор в MVP не шлём — `command` ещё нет, решение в лог. Контракт события — [schemas/asyncapi.yaml](schemas/asyncapi.yaml).
+
+```bash
+cd apps
+cp .env.example .env
+./init.sh
+```
+
+| Сервис | Порт | Swagger |
+| --- | --- | --- |
+| `app` (монолит) | 8080 | — |
+| `temperature-api` | 8081 | http://localhost:8081/swagger |
+| `device` | 8082 | http://localhost:8082/swagger |
+| `telemetry` | 8083 | http://localhost:8083/swagger |
+| `scenario` | 8084 | health |
+| `broker` | 5672 / 15672 | http://localhost:15672 guest/guest |
+| `db` | 5432 | базы `smarthome`, `device`, `telemetry` |
+
+Пути как в задании 4: `GET /api/v1/devices/{id}`, `PATCH /api/v1/devices/{id}/status`, `GET /api/v1/telemetry`. `POST /api/v1/devices` и `POST /api/v1/telemetry` — только переход из монолита, в `schemas/openapi.yaml` их нет (задание 4 уже закрыто).
+
+Конфиг из env: `PORT`, `DATABASE_URL`, `AMQP_URL`. У `device` ещё `DEFAULT_HOUSE_ID` / `DEFAULT_TYPE_ID`. У монолита `DEVICE_API_URL`, `TELEMETRY_API_URL`.
+
+```bash
+make api-doc device
+make api-doc telemetry
+``` 

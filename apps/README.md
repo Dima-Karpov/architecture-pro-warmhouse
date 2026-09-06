@@ -36,7 +36,7 @@ If you prefer to run the application without Docker:
 1. Start the PostgreSQL database:
 
 ```bash
-docker-compose up -d postgres
+docker-compose up -d db
 ```
 
 2. Build and run the application:
