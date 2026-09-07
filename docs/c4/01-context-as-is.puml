@@ -1,0 +1,40 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title System Context — «Тёплый дом» (As-Is)
+
+Person(user, "Жилец", "Смотрит температуру через веб-UI. Ждёт ответ API в том же запросе")
+
+System(monolith, "Монолит «Тёплый дом»", "Синхронный REST JSON + SQL. Живую температуру отдаёт в ответе, в БД сам не пишет")
+
+System_Ext(device, "Датчик температуры", "HTTP GET, JSON без тела запроса. Команды on/off в коде нет")
+
+SystemDb(postgres, "PostgreSQL", "Таблица sensors: реестр и последнее сохранённое состояние")
+
+Rel(user, monolith, "Синхронно вызывает REST API: CRUD датчиков и температура", "HTTP JSON request/response")
+Rel(monolith, device, "Синхронно читает температуру", "GET /temperature?location=  GET /temperature/{id}")
+Rel(monolith, postgres, "Синхронно пишет CRUD и PATCH /value", "SQL таблица sensors")
+
+note right of device
+  **Ответ датчика (JSON)**
+  value, unit, timestamp,
+  location, status, sensor_id,
+  sensor_type, description
+  ----
+  Тела запроса нет
+  on/off в коде нет
+end note
+
+note right of postgres
+  **sensors**
+  id, name, type, location,
+  value, unit, status,
+  last_updated, created_at
+  ----
+  GET /sensors живую t°
+  в Postgres не сохраняет
+end note
+
+SHOW_LEGEND()
+@enduml

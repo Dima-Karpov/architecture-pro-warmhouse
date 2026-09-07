@@ -1,0 +1,27 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Component — scenario
+
+Container_Boundary(scenario, "scenario") {
+    Component(api, "HTTP API", "Fiber 3", "CRUD правил жильца")
+    Component(engine, "Движок правил", "Go", "Если показание — то команда")
+    Component(consumer, "Подписчик телеметрии", "Go", "Читает брокер, не поллит HTTP")
+    Component(repo, "Репозиторий", "pgx", "Сценарии дома")
+}
+
+ContainerDb_Ext(db, "pg-scenario", "PostgreSQL")
+Container_Ext(gw, "API Gateway", "HTTPS / JSON")
+Container_Ext(cmd, "command", "Go")
+Container_Ext(broker, "Брокер", "RabbitMQ")
+
+Rel(gw, api, "Правит сценарии", "HTTP JSON")
+Rel(api, repo, "Читает и пишет")
+Rel(repo, db, "SQL")
+Rel(broker, consumer, "Новое показание", "async")
+Rel(consumer, engine, "Проверяет правила")
+Rel(engine, repo, "Активные сценарии дома")
+Rel(engine, cmd, "Запускает команду", "HTTP JSON")
+
+SHOW_LEGEND()
+@enduml

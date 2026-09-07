@@ -1,0 +1,55 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title Container — «Тёплый дом» (To-Be)
+
+Person(user, "Жилец", "Self-service: дома, модули, сценарии, телеметрия")
+
+System_Boundary(eco, "Экосистема «Тёплый дом»") {
+    Container(web, "Web UI", "SPA, HTTPS", "Кабинет: дома, устройства, сценарии, показания")
+    Container(gw, "API Gateway", "HTTPS / JSON", "Токен + членство (user, house), маршрутизация")
+
+    Container(userHouse, "user-house", "Go", "Регистрация, сессия, дома, кому что можно")
+    Container(device, "device", "Go", "Реестр устройств и типов, подключение комплектов")
+    Container(command, "command", "Go", "Команда любому DeviceType: heat / light / gate / …")
+    Container(telemetry, "telemetry", "Go", "Приём показаний и история")
+    Container(scenario, "scenario", "Go", "Сценарии: если температура → команда")
+
+    ContainerDb(dbUser, "pg-user-house", "PostgreSQL", "Пользователи, дома, членства")
+    ContainerDb(dbDevice, "pg-device", "PostgreSQL", "Устройства и типы")
+    ContainerDb(dbCommand, "pg-command", "PostgreSQL", "Журнал команд")
+    ContainerDb(dbTel, "pg-telemetry", "PostgreSQL", "Показания")
+    ContainerDb(dbSc, "pg-scenario", "PostgreSQL", "Сценарии")
+
+    ContainerQueue(broker, "Брокер", "RabbitMQ", "Телеметрия и события для сценариев")
+}
+
+System_Ext(monolith, "Монолит As-Is", "Legacy Go. Живёт, пока не вынесем device и telemetry")
+System_Ext(partner, "Устройства партнёров", "Датчик, реле, свет, ворота, камера — стандартный протокол")
+
+Rel(user, web, "Открывает кабинет", "HTTPS")
+Rel(web, gw, "Синхронные запросы", "HTTPS JSON")
+
+Rel(gw, userHouse, "Логин и членство (user, house)", "HTTP JSON")
+Rel(gw, device, "Реестр и подключение", "HTTP JSON")
+Rel(gw, command, "Ручная команда", "HTTP JSON")
+Rel(gw, telemetry, "Смотрит показания", "HTTP JSON")
+Rel(gw, scenario, "Правит сценарии", "HTTP JSON")
+
+Rel(userHouse, dbUser, "Читает и пишет", "SQL")
+Rel(device, dbDevice, "Читает и пишет", "SQL")
+Rel(command, dbCommand, "Пишет журнал", "SQL")
+Rel(telemetry, dbTel, "Пишет и читает", "SQL")
+Rel(scenario, dbSc, "Читает и пишет", "SQL")
+
+Rel(command, device, "Адрес и тип устройства", "HTTP JSON")
+Rel(command, partner, "Отправляет команду", "протокол партнёра")
+Rel(telemetry, broker, "Публикует показание", "async")
+Rel(broker, scenario, "Новое показание", "async")
+Rel(scenario, command, "Запускает команду по правилу", "HTTP JSON")
+
+Rel(monolith, device, "Переход: отдаёт реестр sensors", "HTTP")
+Rel(monolith, telemetry, "Переход: отдаёт опрос температуры", "HTTP")
+
+SHOW_LEGEND()
+@enduml
