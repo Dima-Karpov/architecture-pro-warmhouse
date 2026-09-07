@@ -107,7 +107,7 @@
 | **Управление устройствами** | Реестр того, что стоит в доме | устройство, тип, статус, подключение | таблица `sensors`, CRUD | партнёрские приборы, self-service, комплекты |
 | **Отопление** | Команды контуру тепла | реле, on/off, контур | команда с сервера на реле | один из модулей умного дома |
 | **Телеметрия** | Показания с приборов | температура, показание, `last_updated` | синхронный опрос датчика | история, сценарии, другие метрики |
-| **Пользователь / дом** | Кто чем владеет | жилец, дом, модуль | 100 клиентов / 100 модулей, сущностей в БД нет | SaaS, несколько домов, самообслуживание |
+| **Пользователь / дом** | Кто в каком доме | жилец, дом, членство, модуль | 100 клиентов / 100 модулей, сущностей в БД нет | SaaS, несколько домов, самообслуживание |
 
 «Управление устройствами» — опорный контекст: без реестра не появятся свет, ворота и неизвестные датчики. Их **не** выносим в отдельные блоки на схеме задания 1.
 
@@ -188,7 +188,7 @@ To-Be по доменам задания 1. Свет, ворота, камера
 | Телеметрия | показания и история | `telemetry` |
 | — | сценарии «если температура → команда» | `scenario` |
 
-Как сервисы говорят друг с другом — [ADR-006](docs/adr/0006-sync-http-and-broker.md): синхронный HTTP JSON (не gRPC), брокер — только показание → сценарий. Кто жилец и можно ли ему — [ADR-007](docs/adr/0007-auth-at-gateway.md): токен выдаёт `user-house`, пускает Gateway. Чужую БД не читаем ([ADR-004](docs/adr/0004-db-per-service.md)). Свет и ворота не сервисы ([ADR-005](docs/adr/0005-device-type-not-service.md)).
+Как сервисы говорят друг с другом — [ADR-006](docs/adr/0006-sync-http-and-broker.md): синхронный HTTP JSON (не gRPC), брокер — только показание → сценарий. Кто жилец и можно ли ему — [ADR-007](docs/adr/0007-auth-at-gateway.md): токен выдаёт `user-house`, Gateway проверяет членство `(user, house)`. User — House N:N — [ADR-008](docs/adr/0008-user-house-membership.md). Чужую БД не читаем ([ADR-004](docs/adr/0004-db-per-service.md)). Свет и ворота не сервисы ([ADR-005](docs/adr/0005-device-type-not-service.md)).
 
 SVG собирает [GitHub Actions](.github/workflows/plantuml.yml).
 
@@ -208,7 +208,7 @@ Person(user, "Жилец", "Self-service: дома, модули, сценари
 
 System_Boundary(eco, "Экосистема «Тёплый дом»") {
     Container(web, "Web UI", "SPA, HTTPS", "Кабинет: дома, устройства, сценарии, показания")
-    Container(gw, "API Gateway", "HTTPS / JSON", "Вход жильца: проверяет токен, маршрутизация")
+    Container(gw, "API Gateway", "HTTPS / JSON", "Токен + членство (user, house), маршрутизация")
 
     Container(userHouse, "user-house", "Go", "Регистрация, сессия, дома, кому что можно")
     Container(device, "device", "Go", "Реестр устройств и типов, подключение комплектов")
@@ -216,7 +216,7 @@ System_Boundary(eco, "Экосистема «Тёплый дом»") {
     Container(telemetry, "telemetry", "Go", "Приём показаний и история")
     Container(scenario, "scenario", "Go", "Сценарии: если температура → команда")
 
-    ContainerDb(dbUser, "pg-user-house", "PostgreSQL", "Пользователи и дома")
+    ContainerDb(dbUser, "pg-user-house", "PostgreSQL", "Пользователи, дома, членства")
     ContainerDb(dbDevice, "pg-device", "PostgreSQL", "Устройства и типы")
     ContainerDb(dbCommand, "pg-command", "PostgreSQL", "Журнал команд")
     ContainerDb(dbTel, "pg-telemetry", "PostgreSQL", "Показания")
@@ -231,7 +231,7 @@ System_Ext(partner, "Устройства партнёров", "Датчик, р
 Rel(user, web, "Открывает кабинет", "HTTPS")
 Rel(web, gw, "Синхронные запросы", "HTTPS JSON")
 
-Rel(gw, userHouse, "Логин и проверка токена", "HTTP JSON")
+Rel(gw, userHouse, "Логин и членство (user, house)", "HTTP JSON")
 Rel(gw, device, "Реестр и подключение", "HTTP JSON")
 Rel(gw, command, "Ручная команда", "HTTP JSON")
 Rel(gw, telemetry, "Смотрит показания", "HTTP JSON")
@@ -260,7 +260,7 @@ SHOW_LEGEND()
 
 По одному Component на каждый сервис. Жилец в сервисы не ходит напрямую: Gateway уже проверил токен.
 
-`user-house` — кто пользователь и какие у него дома.
+`user-house` — кто пользователь, какие дома и кто в них состоит.
 
 ![Component — user-house](docs/c4/02-component-user-house.svg)
 
@@ -273,19 +273,19 @@ SHOW_LEGEND()
 title Component — user-house
 
 Container_Boundary(userHouse, "user-house") {
-    Component(api, "HTTP API", "Fiber 3", "Регистрация, логин, дома, кто владелец")
-    Component(auth, "Сессии и доступ", "Go", "Выдаёт токен, отвечает Gateway: этот жилец существует")
-    Component(houses, "Дома", "Go", "Список домов пользователя, self-service")
-    Component(repo, "Репозиторий", "pgx", "Пользователи, токены, дома")
+    Component(api, "HTTP API", "Fiber 3", "Регистрация, логин, дома и жильцы")
+    Component(auth, "Сессии и доступ", "Go", "Выдаёт токен; Gateway: user — член дома?")
+    Component(houses, "Дома", "Go", "CRUD домов и членств: инвайт, role, выход")
+    Component(repo, "Репозиторий", "pgx", "Пользователи, дома, HouseMember")
 }
 
 ContainerDb_Ext(db, "pg-user-house", "PostgreSQL")
 Container_Ext(gw, "API Gateway", "HTTPS / JSON", "Проверяет токен, не логинит сам")
 
 Rel(gw, api, "Логин и профиль", "HTTP JSON")
-Rel(gw, auth, "Токен живой, какой user_id", "HTTP JSON")
+Rel(gw, auth, "Токен живой; user — член дома?", "HTTP JSON")
 Rel(api, auth, "Логин / логаут")
-Rel(api, houses, "CRUD домов")
+Rel(api, houses, "CRUD домов и членств")
 Rel(auth, repo, "Читает и пишет")
 Rel(houses, repo, "Читает и пишет")
 Rel(repo, db, "SQL")
@@ -384,7 +384,7 @@ title Component — command
 Container_Boundary(command, "command") {
     Component(api, "HTTP API", "Fiber 3", "Ручная команда и вызов от сценария")
     Component(handler, "Обработчик команд", "Go", "on / off / lock по DeviceType")
-    Component(acl, "Проверка дома", "Go", "Устройство принадлежит дому жильца")
+    Component(acl, "Проверка дома", "Go", "Устройство дома, в котором жилец состоит")
     Component(adapter, "Адаптер партнёра", "Go", "Один выход на heat / light / gate / …")
     Component(repo, "Журнал", "pgx", "Кто что отправил и чем кончилось")
 }
@@ -397,7 +397,7 @@ System_Ext(partner, "Устройства партнёров")
 
 Rel(gw, api, "Команда жильца", "HTTP JSON")
 Rel(scenario, api, "Команда сценария", "HTTP JSON")
-Rel(api, acl, "Этот дом его")
+Rel(api, acl, "Устройство дома жильца")
 Rel(acl, device, "Чей device_id", "HTTP JSON")
 Rel(api, handler, "Выполнить")
 Rel(handler, adapter, "По типу прибора")
@@ -459,7 +459,6 @@ title Code — модель устройства (критичный кусок)
 
 class House {
   id
-  owner_id
   address
 }
 
@@ -538,12 +537,13 @@ end
 
 `Module` — комплект, который жилец сам выбирает для дома (отопление, свет, ворота). `Device` — конкретный прибор с серийником. Связи Module — Device нет: оба смотрят на дом и тип. `DeviceType` — справочник видов; свет и ворота не отдельные таблицы и не сервисы ([ADR-005](docs/adr/0005-device-type-not-service.md)).
 
-Как в задании: один жилец — много домов, у дома один владелец (`owner_id`).
+User — House **N:N** через `HouseMember` ([ADR-008](docs/adr/0008-user-house-membership.md)): семья и несколько владельцев. Пример курса — 1:N / `owner_id`; отклонение сознательное. Хозяин — `role = owner`. Несколько `owner` можно, дом без `owner` нельзя. Создание = `House` + `HouseMember(owner)` атомарно. Пара `(user_id, house_id)` уникальна — на сущности, не только в легенде.
 
 | Сущность | Сервис / БД | Атрибуты | Зачем |
 | --- | --- | --- | --- |
 | `User` | `user-house` | `id`, `email`, `created_at` | кто жилец |
-| `House` | `user-house` | `id`, `owner_id`, `address`, `name` | дом, один владелец |
+| `House` | `user-house` | `id`, `address`, `name` | дом |
+| `HouseMember` | `user-house` | `id`, `user_id`, `house_id`, `role` (`owner` \| `resident`), unique(`user_id`, `house_id`) | жилец в доме |
 | `DeviceType` | `device` | `id`, `code`, `name` | heating / light / gate / camera / unknown |
 | `Module` | `device` | `id`, `house_id`, `type_id`, `name`, `status` | выбранный комплект в доме |
 | `Device` | `device` | `id`, `type_id`, `house_id`, `serial_number`, `address`, `status` | прибор в доме; `inactive` — ещё не подключён |
@@ -553,7 +553,9 @@ end
 
 | Связь | Тип | Смысл |
 | --- | --- | --- |
-| User — House | 1 : N | один жилец — много домов; у дома один владелец |
+| User — House | N : N | через `HouseMember`: семья в доме, жилец в нескольких домах |
+| User — HouseMember | 1 : N | один жилец — много членств |
+| House — HouseMember | 1 : N (≥1) | дом без членов нельзя; хотя бы один `owner` |
 | House — Module | 1 : N | в доме несколько комплектов |
 | DeviceType — Module | 1 : N | один тип — много комплектов |
 | House — Device | 1 : N | в доме несколько устройств |
@@ -589,15 +591,25 @@ package "user-house · pg-user-house" #E3F2FD {
     created_at : time
   }
 
+  entity "HouseMember" as HouseMember {
+    * id : UUID <<PK>>
+    --
+    * user_id : UUID <<FK User>>
+    * house_id : UUID <<FK House>>
+    * role : owner | resident
+    --
+    unique(user_id, house_id)
+  }
+
   entity "House" as House {
     * id : UUID <<PK>>
     --
-    * owner_id : UUID <<FK User>>
     * address : string
     name : string
   }
 
-  User ||--o{ House : 1:N
+  User ||--o{ HouseMember : 1:N
+  House ||--|{ HouseMember : 1:N ≥1
 }
 
 package "device · pg-device" #E8F5E9 {
@@ -673,10 +685,12 @@ Device ||--o{ TelemetryData : 1:N
 Device ||--o{ Command : 1:N
 
 legend bottom
-  Рамка = своя Postgres (ADR-004). Все связи **1:N**.
+  Рамка = своя Postgres (ADR-004).
   id — UUID v7 (16 байт, по времени).
   **FK** — ключ в своей БД. **ref** — id другого сервиса, только API.
-  User — House: один жилец — много домов, у дома один владелец.
+  User — House: N:N через HouseMember (ADR-008).
+  Дом без owner нельзя. Создание = House + HouseMember(owner)
+  атомарно. Owner инвайтит; выйти последнему owner нельзя.
   DeviceType.code: heating | light | gate | camera | unknown.
   Module — комплект в доме. Device — прибор. Связи Module — Device нет:
   оба смотрят на House и DeviceType. Device.status: on / off / inactive.

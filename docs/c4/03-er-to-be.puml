@@ -18,15 +18,25 @@ package "user-house · pg-user-house" #E3F2FD {
     created_at : time
   }
 
+  entity "HouseMember" as HouseMember {
+    * id : UUID <<PK>>
+    --
+    * user_id : UUID <<FK User>>
+    * house_id : UUID <<FK House>>
+    * role : owner | resident
+    --
+    unique(user_id, house_id)
+  }
+
   entity "House" as House {
     * id : UUID <<PK>>
     --
-    * owner_id : UUID <<FK User>>
     * address : string
     name : string
   }
 
-  User ||--o{ House : 1:N
+  User ||--o{ HouseMember : 1:N
+  House ||--|{ HouseMember : 1:N ≥1
 }
 
 package "device · pg-device" #E8F5E9 {
@@ -102,10 +112,12 @@ Device ||--o{ TelemetryData : 1:N
 Device ||--o{ Command : 1:N
 
 legend bottom
-  Рамка = своя Postgres (ADR-004). Все связи **1:N**.
+  Рамка = своя Postgres (ADR-004).
   id — UUID v7 (16 байт, по времени).
   **FK** — ключ в своей БД. **ref** — id другого сервиса, только API.
-  User — House: один жилец — много домов, у дома один владелец.
+  User — House: N:N через HouseMember (ADR-008).
+  Дом без owner нельзя. Создание = House + HouseMember(owner)
+  атомарно. Owner инвайтит; выйти последнему owner нельзя.
   DeviceType.code: heating | light | gate | camera | unknown.
   Module — комплект в доме. Device — прибор. Связи Module — Device нет:
   оба смотрят на House и DeviceType. Device.status: on / off / inactive.

@@ -3,7 +3,6 @@ title Code — модель устройства (критичный кусок)
 
 class House {
   id
-  owner_id
   address
 }
 

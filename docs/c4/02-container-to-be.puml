@@ -7,7 +7,7 @@ Person(user, "Жилец", "Self-service: дома, модули, сценари
 
 System_Boundary(eco, "Экосистема «Тёплый дом»") {
     Container(web, "Web UI", "SPA, HTTPS", "Кабинет: дома, устройства, сценарии, показания")
-    Container(gw, "API Gateway", "HTTPS / JSON", "Вход жильца: проверяет токен, маршрутизация")
+    Container(gw, "API Gateway", "HTTPS / JSON", "Токен + членство (user, house), маршрутизация")
 
     Container(userHouse, "user-house", "Go", "Регистрация, сессия, дома, кому что можно")
     Container(device, "device", "Go", "Реестр устройств и типов, подключение комплектов")
@@ -15,7 +15,7 @@ System_Boundary(eco, "Экосистема «Тёплый дом»") {
     Container(telemetry, "telemetry", "Go", "Приём показаний и история")
     Container(scenario, "scenario", "Go", "Сценарии: если температура → команда")
 
-    ContainerDb(dbUser, "pg-user-house", "PostgreSQL", "Пользователи и дома")
+    ContainerDb(dbUser, "pg-user-house", "PostgreSQL", "Пользователи, дома, членства")
     ContainerDb(dbDevice, "pg-device", "PostgreSQL", "Устройства и типы")
     ContainerDb(dbCommand, "pg-command", "PostgreSQL", "Журнал команд")
     ContainerDb(dbTel, "pg-telemetry", "PostgreSQL", "Показания")
@@ -30,7 +30,7 @@ System_Ext(partner, "Устройства партнёров", "Датчик, р
 Rel(user, web, "Открывает кабинет", "HTTPS")
 Rel(web, gw, "Синхронные запросы", "HTTPS JSON")
 
-Rel(gw, userHouse, "Логин и проверка токена", "HTTP JSON")
+Rel(gw, userHouse, "Логин и членство (user, house)", "HTTP JSON")
 Rel(gw, device, "Реестр и подключение", "HTTP JSON")
 Rel(gw, command, "Ручная команда", "HTTP JSON")
 Rel(gw, telemetry, "Смотрит показания", "HTTP JSON")
