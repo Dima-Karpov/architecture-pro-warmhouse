@@ -1,0 +1,25 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Component — user-house
+
+Container_Boundary(userHouse, "user-house") {
+    Component(api, "HTTP API", "Fiber 3", "Регистрация, логин, дома и жильцы")
+    Component(auth, "Сессии и доступ", "Go", "Выдаёт токен; Gateway: user — член дома?")
+    Component(houses, "Дома", "Go", "CRUD домов и членств: инвайт, role, выход")
+    Component(repo, "Репозиторий", "pgx", "Пользователи, дома, HouseMember")
+}
+
+ContainerDb_Ext(db, "pg-user-house", "PostgreSQL")
+Container_Ext(gw, "API Gateway", "HTTPS / JSON", "Проверяет токен, не логинит сам")
+
+Rel(gw, api, "Логин и профиль", "HTTP JSON")
+Rel(gw, auth, "Токен живой; user — член дома?", "HTTP JSON")
+Rel(api, auth, "Логин / логаут")
+Rel(api, houses, "CRUD домов и членств")
+Rel(auth, repo, "Читает и пишет")
+Rel(houses, repo, "Читает и пишет")
+Rel(repo, db, "SQL")
+
+SHOW_LEGEND()
+@enduml

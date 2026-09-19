@@ -32,6 +32,14 @@ func main() {
 	temperatureService := services.NewTemperatureService(temperatureAPIURL)
 	log.Printf("Temperature service initialized with API URL: %s\n", temperatureAPIURL)
 
+	deviceAPIURL := getEnv("DEVICE_API_URL", "http://device:8082")
+	deviceService := services.NewDeviceService(deviceAPIURL)
+	log.Printf("Device service initialized with API URL: %s\n", deviceAPIURL)
+
+	telemetryAPIURL := getEnv("TELEMETRY_API_URL", "http://telemetry:8083")
+	telemetryService := services.NewTelemetryService(telemetryAPIURL)
+	log.Printf("Telemetry service initialized with API URL: %s\n", telemetryAPIURL)
+
 	// Initialize router
 	router := gin.Default()
 
@@ -46,7 +54,7 @@ func main() {
 	apiRoutes := router.Group("/api/v1")
 
 	// Register sensor routes
-	sensorHandler := handlers.NewSensorHandler(database, temperatureService)
+	sensorHandler := handlers.NewSensorHandler(database, temperatureService, deviceService, telemetryService)
 	sensorHandler.RegisterRoutes(apiRoutes)
 
 	// Start server
@@ -72,7 +80,7 @@ func main() {
 	// Create a deadline for server shutdown
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := srv.Shutdown(ctx); err != nil {
+	if err = srv.Shutdown(ctx); err != nil {
 		log.Fatalf("Server forced to shutdown: %v\n", err)
 	}
 

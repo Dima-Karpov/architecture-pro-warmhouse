@@ -1,0 +1,70 @@
+asyncapi: 3.0.0
+channels:
+  telemetry.received:
+    address: telemetry.received
+    description: Новое показание после записи в pg-telemetry
+    messages:
+      telemetryReceived:
+        $ref: '#/components/messages/telemetryReceived'
+components:
+  messages:
+    telemetryReceived:
+      name: telemetryReceived
+      payload:
+        $ref: '#/components/schemas/TelemetryReceived'
+  schemas:
+    TelemetryReceived:
+      properties:
+        device_id:
+          example: 01932c4e-8a1b-7f3c-8d2e-1a4b5c6d7e8f
+          format: uuid
+          type: string
+        house_id:
+          example: 01932c4e-8a1d-7222-8333-3c6d7e8f9012
+          format: uuid
+          type: string
+        recorded_at:
+          example: "2026-09-05T10:00:00Z"
+          format: date-time
+          type: string
+        unit:
+          example: °C
+          type: string
+        value:
+          example: 17.2
+          format: double
+          type: number
+      required:
+      - recorded_at
+      - unit
+      - value
+      - device_id
+      - house_id
+      type: object
+defaultContentType: application/json
+info:
+  description: telemetry публикует показание, scenario читает и решает, звать ли command
+    (ADR-006).
+  title: Тёплый дом — события телеметрии
+  version: 1.0.0
+operations:
+  onTelemetryReceived:
+    action: receive
+    channel:
+      $ref: '#/channels/telemetry.received'
+    messages:
+    - $ref: '#/channels/telemetry.received/messages/telemetryReceived'
+    summary: scenario читает показание
+  publishTelemetryReceived:
+    action: send
+    channel:
+      $ref: '#/channels/telemetry.received'
+    messages:
+    - $ref: '#/channels/telemetry.received/messages/telemetryReceived'
+    summary: telemetry публикует показание
+servers:
+  broker:
+    description: RabbitMQ
+    host: broker.warmhouse.example
+    pathname: /
+    protocol: amqp

@@ -1,0 +1,26 @@
+@startuml
+title Code — команда устройству (отопление / свет / ворота)
+
+actor Жилец
+participant "Web UI" as ui
+participant "API Gateway" as gw
+participant command
+participant device
+participant "Устройство партнёра" as hw
+
+Жилец -> ui: on / off / lock
+ui -> gw: POST /commands
+gw -> command: команда + device_id
+command -> device: GET устройство
+device --> command: type, адрес, status
+alt устройство inactive
+    command --> gw: 409
+else ok
+    command -> hw: команда по типу\nheat / light / gate / …
+    hw --> command: ack
+    command --> gw: 200
+    gw --> ui: ок
+    ui --> Жилец: статус
+end
+
+@enduml

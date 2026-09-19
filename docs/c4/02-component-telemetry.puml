@@ -1,0 +1,29 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Component — telemetry
+
+Container_Boundary(telemetry, "telemetry") {
+    Component(api, "HTTP API", "Fiber 3", "Приём показания и выдача истории")
+    Component(validate, "Валидация", "Go", "Тип метрики, диапазон, устройство существует")
+    Component(store, "Хранилище показаний", "Go", "Пишет историю, отдаёт выборку")
+    Component(pub, "Издатель", "Go", "Кладёт событие в брокер для сценариев")
+}
+
+ContainerDb_Ext(db, "pg-telemetry", "PostgreSQL", "История показаний")
+Container_Ext(broker, "Брокер", "RabbitMQ", "События показаний")
+Container_Ext(gw, "API Gateway", "HTTPS / JSON")
+Container_Ext(device, "device", "Go", "Проверка, что устройство есть")
+System_Ext(partner, "Устройства партнёров", "Шлют температуру и другие метрики")
+
+Rel(gw, api, "Жилец смотрит историю", "HTTP JSON")
+Rel(partner, api, "Присылает показание", "HTTP JSON")
+Rel(api, validate, "Проверяет пакет")
+Rel(validate, device, "Устройство известно", "HTTP JSON")
+Rel(validate, store, "Сохраняет валидное")
+Rel(store, db, "SQL")
+Rel(store, pub, "После записи")
+Rel(pub, broker, "telemetry.received", "async")
+
+SHOW_LEGEND()
+@enduml

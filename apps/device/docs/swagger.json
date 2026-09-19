@@ -1,0 +1,430 @@
+{
+    "components": {
+        "schemas": {
+            "healthcheck.Response": {
+                "properties": {
+                    "status": {
+                        "type": "string"
+                    }
+                },
+                "type": "object"
+            },
+            "responses.DeviceResponse": {
+                "properties": {
+                    "address": {
+                        "example": "192.168.10.4:47808",
+                        "type": "string"
+                    },
+                    "external_id": {
+                        "example": "1",
+                        "type": "string"
+                    },
+                    "house_id": {
+                        "example": "01932c4e-8a1d-7222-8333-3c6d7e8f9012",
+                        "format": "uuid",
+                        "type": "string"
+                    },
+                    "id": {
+                        "example": "01932c4e-8a1b-7f3c-8d2e-1a4b5c6d7e8f",
+                        "format": "uuid",
+                        "type": "string"
+                    },
+                    "serial_number": {
+                        "example": "RL-22",
+                        "type": "string"
+                    },
+                    "status": {
+                        "enum": [
+                            "on",
+                            "off",
+                            "inactive"
+                        ],
+                        "example": "on",
+                        "type": "string"
+                    },
+                    "type_code": {
+                        "enum": [
+                            "heating",
+                            "light",
+                            "gate",
+                            "camera",
+                            "unknown"
+                        ],
+                        "example": "heating",
+                        "type": "string"
+                    },
+                    "type_id": {
+                        "example": "01932c4e-8a1c-7111-8222-2b5c6d7e8f90",
+                        "format": "uuid",
+                        "type": "string"
+                    }
+                },
+                "type": "object"
+            },
+            "responses.ErrorContext": {
+                "properties": {
+                    "id": {
+                        "example": "01932c4e-8a1b-7f3c-8d2e-1a4b5c6d7e8f",
+                        "format": "uuid",
+                        "type": "string"
+                    }
+                },
+                "type": "object"
+            },
+            "responses.InternalErrorResponse": {
+                "properties": {
+                    "errors": {
+                        "items": {
+                            "$ref": "#/components/schemas/responses.InternalServerError"
+                        },
+                        "type": "array",
+                        "uniqueItems": false
+                    }
+                },
+                "type": "object"
+            },
+            "responses.InternalServerError": {
+                "properties": {
+                    "message": {
+                        "example": "Something went wrong",
+                        "type": "string"
+                    },
+                    "type": {
+                        "enum": [
+                            "InternalServerError"
+                        ],
+                        "example": "InternalServerError",
+                        "type": "string"
+                    }
+                },
+                "type": "object"
+            },
+            "responses.NotFoundError": {
+                "properties": {
+                    "context": {
+                        "$ref": "#/components/schemas/responses.ErrorContext"
+                    },
+                    "message": {
+                        "example": "Device not found",
+                        "type": "string"
+                    },
+                    "type": {
+                        "enum": [
+                            "NotFoundError"
+                        ],
+                        "example": "NotFoundError",
+                        "type": "string"
+                    }
+                },
+                "type": "object"
+            },
+            "responses.NotFoundResponse": {
+                "properties": {
+                    "errors": {
+                        "items": {
+                            "$ref": "#/components/schemas/responses.NotFoundError"
+                        },
+                        "type": "array",
+                        "uniqueItems": false
+                    }
+                },
+                "type": "object"
+            },
+            "responses.StatusUpdate": {
+                "properties": {
+                    "status": {
+                        "enum": [
+                            "on",
+                            "off"
+                        ],
+                        "example": "off",
+                        "type": "string"
+                    }
+                },
+                "type": "object"
+            },
+            "responses.UpsertRequest": {
+                "properties": {
+                    "address": {
+                        "example": "Living Room",
+                        "type": "string"
+                    },
+                    "external_id": {
+                        "example": "1",
+                        "type": "string"
+                    },
+                    "serial_number": {
+                        "example": "RL-22",
+                        "type": "string"
+                    },
+                    "status": {
+                        "enum": [
+                            "on",
+                            "off",
+                            "inactive"
+                        ],
+                        "example": "on",
+                        "type": "string"
+                    },
+                    "type_code": {
+                        "enum": [
+                            "heating",
+                            "light",
+                            "gate",
+                            "camera",
+                            "unknown"
+                        ],
+                        "example": "heating",
+                        "type": "string"
+                    }
+                },
+                "type": "object"
+            }
+        }
+    },
+    "info": {
+        "description": "Реестр устройств. Монолит отдаёт sensors на переход.",
+        "title": "device",
+        "version": "1.0.0"
+    },
+    "externalDocs": {
+        "description": "",
+        "url": ""
+    },
+    "paths": {
+        "/api/v1/devices": {
+            "get": {
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "items": {
+                                        "$ref": "#/components/schemas/responses.DeviceResponse"
+                                    },
+                                    "type": "array"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    },
+                    "500": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/responses.InternalErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Internal Server Error"
+                    }
+                },
+                "summary": "Список устройств",
+                "tags": [
+                    "device"
+                ]
+            },
+            "post": {
+                "description": "Монолит отдаёт реестр sensors: тот же external_id обновляет карточку.",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "oneOf": [
+                                    {
+                                        "type": "object"
+                                    },
+                                    {
+                                        "$ref": "#/components/schemas/responses.UpsertRequest",
+                                        "summary": "request",
+                                        "description": "Устройство"
+                                    }
+                                ]
+                            }
+                        }
+                    },
+                    "description": "Устройство",
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/responses.DeviceResponse"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    },
+                    "500": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/responses.InternalErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Internal Server Error"
+                    }
+                },
+                "summary": "Создать или обновить устройство",
+                "tags": [
+                    "device"
+                ]
+            }
+        },
+        "/api/v1/devices/{id}": {
+            "get": {
+                "description": "Карточка прибора. Монолит и command берут type_code и address.",
+                "parameters": [
+                    {
+                        "description": "Device ID",
+                        "in": "path",
+                        "name": "id",
+                        "required": true,
+                        "schema": {
+                            "format": "uuid",
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/responses.DeviceResponse"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/responses.NotFoundResponse"
+                                }
+                            }
+                        },
+                        "description": "Not Found"
+                    },
+                    "500": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/responses.InternalErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Internal Server Error"
+                    }
+                },
+                "summary": "Получить устройство",
+                "tags": [
+                    "device"
+                ]
+            }
+        },
+        "/api/v1/devices/{id}/status": {
+            "patch": {
+                "parameters": [
+                    {
+                        "description": "Device ID",
+                        "in": "path",
+                        "name": "id",
+                        "required": true,
+                        "schema": {
+                            "format": "uuid",
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "oneOf": [
+                                    {
+                                        "type": "object"
+                                    },
+                                    {
+                                        "$ref": "#/components/schemas/responses.StatusUpdate",
+                                        "summary": "request",
+                                        "description": "Новый статус on/off"
+                                    }
+                                ]
+                            }
+                        }
+                    },
+                    "description": "Новый статус on/off",
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/responses.DeviceResponse"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/responses.NotFoundResponse"
+                                }
+                            }
+                        },
+                        "description": "Not Found"
+                    },
+                    "500": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/responses.InternalErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Internal Server Error"
+                    }
+                },
+                "summary": "Обновить состояние устройства",
+                "tags": [
+                    "device"
+                ]
+            }
+        },
+        "/health": {
+            "get": {
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/healthcheck.Response"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    }
+                },
+                "summary": "Health check",
+                "tags": [
+                    "health"
+                ]
+            }
+        }
+    },
+    "openapi": "3.1.0",
+    "servers": [
+        {
+            "description": "local",
+            "url": "http://localhost:8082"
+        }
+    ]
+}

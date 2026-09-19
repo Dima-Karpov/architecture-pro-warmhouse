@@ -1,0 +1,90 @@
+components:
+  schemas:
+    healthcheck.Response:
+      properties:
+        status:
+          type: string
+      type: object
+    responses.TemperatureResponse:
+      properties:
+        description:
+          type: string
+        location:
+          type: string
+        sensor_id:
+          type: string
+        sensor_type:
+          type: string
+        status:
+          type: string
+        timestamp:
+          type: string
+        unit:
+          type: string
+        value:
+          type: number
+      type: object
+externalDocs:
+  description: ""
+  url: ""
+info:
+  description: Имитация датчика температуры для монолита smart_home.
+  title: temperature-api
+  version: 1.0.0
+openapi: 3.1.0
+paths:
+  /health:
+    get:
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/healthcheck.Response'
+          description: OK
+      summary: Health check
+      tags:
+      - health
+  /temperature:
+    get:
+      description: 'Случайное показание. Пустой location мапится по sensor id: 1 Living
+        Room, 2 Bedroom, 3 Kitchen.'
+      parameters:
+      - description: Living Room, Bedroom, Kitchen
+        in: query
+        name: location
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/responses.TemperatureResponse'
+          description: OK
+      summary: Температура по комнате
+      tags:
+      - temperature
+  /temperature/{id}:
+    get:
+      description: 1 Living Room, 2 Bedroom, 3 Kitchen. Иначе location=Unknown.
+      parameters:
+      - description: sensor id
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/responses.TemperatureResponse'
+          description: OK
+      summary: Температура по id датчика
+      tags:
+      - temperature
+servers:
+- description: local
+  url: http://localhost:8081

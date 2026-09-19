@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Component — device
+
+Container_Boundary(device, "device") {
+    Component(api, "HTTP API", "Fiber 3", "CRUD устройства, список типов, self-service подключение")
+    Component(registry, "Менеджер состояния", "Go", "Статус, дом, тип, serial")
+    Component(pairing, "Обработчик подключения", "Go", "Жилец сам привязывает комплект")
+    Component(repo, "Репозиторий", "pgx", "Запись в свою БД")
+}
+
+ContainerDb_Ext(db, "pg-device", "PostgreSQL", "Устройства и DeviceType")
+Container_Ext(command, "command", "Go", "Нужен тип и адрес для команды")
+Container_Ext(gw, "API Gateway", "HTTPS / JSON")
+System_Ext(partner, "Устройства партнёров", "Комплект: датчик / реле / свет / ворота")
+
+Rel(gw, api, "Запросы реестра и pairing", "HTTP JSON")
+Rel(api, registry, "Меняет состояние")
+Rel(api, pairing, "Запускает подключение")
+Rel(registry, repo, "Читает и пишет")
+Rel(pairing, repo, "Сохраняет новое устройство")
+Rel(pairing, partner, "Проверяет комплект", "протокол партнёра")
+Rel(repo, db, "SQL")
+Rel(command, api, "Спрашивает устройство по id", "HTTP JSON")
+
+SHOW_LEGEND()
+@enduml

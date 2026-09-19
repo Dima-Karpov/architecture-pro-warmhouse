@@ -1,0 +1,31 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Component — command
+
+Container_Boundary(command, "command") {
+    Component(api, "HTTP API", "Fiber 3", "Ручная команда и вызов от сценария")
+    Component(handler, "Обработчик команд", "Go", "on / off / lock по DeviceType")
+    Component(acl, "Проверка дома", "Go", "Устройство дома, в котором жилец состоит")
+    Component(adapter, "Адаптер партнёра", "Go", "Один выход на heat / light / gate / …")
+    Component(repo, "Журнал", "pgx", "Кто что отправил и чем кончилось")
+}
+
+ContainerDb_Ext(db, "pg-command", "PostgreSQL")
+Container_Ext(gw, "API Gateway", "HTTPS / JSON")
+Container_Ext(device, "device", "Go", "Тип, адрес, status, house_id")
+Container_Ext(scenario, "scenario", "Go", "Автокоманда по правилу")
+System_Ext(partner, "Устройства партнёров")
+
+Rel(gw, api, "Команда жильца", "HTTP JSON")
+Rel(scenario, api, "Команда сценария", "HTTP JSON")
+Rel(api, acl, "Устройство дома жильца")
+Rel(acl, device, "Чей device_id", "HTTP JSON")
+Rel(api, handler, "Выполнить")
+Rel(handler, adapter, "По типу прибора")
+Rel(adapter, partner, "Команда", "протокол партнёра")
+Rel(handler, repo, "Пишет журнал")
+Rel(repo, db, "SQL")
+
+SHOW_LEGEND()
+@enduml
